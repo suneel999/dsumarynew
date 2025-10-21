@@ -212,6 +212,10 @@ def review():
             "Medications": data.get("Medications", [])
         }
 
+        # Robust init: Medications must be a list (handle missing/None/"N/A"/wrong type)
+        meds_src = data.get("Medications")
+        edited["Medications"] = meds_src if isinstance(meds_src, list) else []
+
         # Ensure diagnosis includes "ADVICE: MEDICAL MANAGEMENT"
         diagnosis = edited.get("Diagnosis", [])
         if isinstance(diagnosis, str):
@@ -221,8 +225,9 @@ def review():
             diagnosis.append("ADVICE: MEDICAL MANAGEMENT")
         edited["Diagnosis"] = diagnosis
 
-        # Ensure "Medications" is present before appending
-        edited.setdefault("Medications", [])
+        # Safety net: make sure it's still a list before we append
+        if not isinstance(edited.get("Medications"), list):
+            edited["Medications"] = []
 
         # Collect medications (up to 10; form forced uppercase)
         for i in range(1, 11):
