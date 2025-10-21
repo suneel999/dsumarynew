@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medical Discharge Summary Generator</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .upload-container {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            padding: 2rem;
+            margin-top: 2rem;
+        }
+        .header {
+            background-color: #0d6efd;
+            color: white;
+            padding: 1.5rem;
+            border-radius: 10px 10px 0 0;
+            margin-bottom: 2rem;
+        }
+        .btn-upload {
+            background-color: #0d6efd;
+            border: none;
+            padding: 0.5rem 1.5rem;
+        }
+        .btn-upload:hover {
+            background-color: #0b5ed7;
+        }
+        .file-input-label {
+            cursor: pointer;
+            padding: 1rem;
+            border: 2px dashed #dee2e6;
+            border-radius: 5px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+        .file-input-label:hover {
+            border-color: #0d6efd;
+            background-color: #f0f7ff;
+        }
+        .preview-image {
+            max-width: 200px;
+            max-height: 200px;
+            margin-top: 1rem;
+        }
+        .loading-spinner {
+            display: none;
+            margin: 1rem auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="upload-container">
+                    <div class="header text-center">
+                        <h2><i class="bi bi-file-earmark-medical"></i> Medical Discharge Summary Generator</h2>
+                        <p class="mb-0">Upload a patient discharge PDF to generate a formatted summary document</p>
+                    </div>
+
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                                    {{ message }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+
+                    <form method="POST" enctype="multipart/form-data">
+                        <div class="mb-4">
+                            <label for="pdf" class="form-label fw-bold">Patient Discharge PDF</label>
+                            <div class="file-input-label" id="fileDropArea">
+                                <i class="bi bi-cloud-arrow-up fs-1"></i>
+                                <p class="mb-2">Drag & drop your PDF here or click to browse</p>
+                                <input type="file" class="form-control" id="pdf" name="pdf" accept=".pdf" required>
+                                <small class="text-muted">Max file size: 16MB</small>
+                            </div>
+                            <div id="fileName" class="mt-2 fw-bold"></div>
+                        </div>
+
+                        <div class="text-center">
+                            <button type="submit" class="btn btn-primary btn-upload" id="submitBtn">
+                                <span id="submitText">Generate Discharge Summary</span>
+                                <div class="spinner-border spinner-border-sm loading-spinner" id="loadingSpinner" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // File input handling
+        const pdfInput = document.getElementById('pdf');
+        const fileDropArea = document.getElementById('fileDropArea');
+        const fileName = document.getElementById('fileName');
+
+        pdfInput.addEventListener('change', function() {
+            if (this.files.length > 0) {
+                fileName.textContent = this.files[0].name;
+            }
+        });
+
+        // Drag and drop functionality
+        fileDropArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            fileDropArea.style.borderColor = '#0d6efd';
+            fileDropArea.style.backgroundColor = '#f0f7ff';
+        });
+
+        fileDropArea.addEventListener('dragleave', () => {
+            fileDropArea.style.borderColor = '#dee2e6';
+            fileDropArea.style.backgroundColor = 'white';
+        });
+
+        fileDropArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            fileDropArea.style.borderColor = '#dee2e6';
+            fileDropArea.style.backgroundColor = 'white';
+
+            if (e.dataTransfer.files.length) {
+                pdfInput.files = e.dataTransfer.files;
+                fileName.textContent = e.dataTransfer.files[0].name;
+            }
+        });
+
+        // Form submission loading state
+        const form = document.querySelector('form');
+        const submitBtn = document.getElementById('submitBtn');
+        const submitText = document.getElementById('submitText');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+
+        form.addEventListener('submit', function() {
+            submitText.textContent = 'Processing...';
+            loadingSpinner.style.display = 'inline-block';
+            submitBtn.disabled = true;
+        });
+    </script>
+</body>
+</html>
