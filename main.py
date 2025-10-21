@@ -180,7 +180,7 @@ def review():
     if request.method == "POST":
         data = session.get('json_data') or {}
         edited = {
-            # Personal info stays from extracted data in session (form now excludes them)
+            # Personal info stays from extracted data; review form only edits medical sections
             "umr": data.get("umr", "N/A"),
             "name": data.get("name", "N/A"),
             "age/gender": data.get("age/gender", "N/A"),
@@ -191,118 +191,140 @@ def review():
             "ward": data.get("ward", "N/A"),
             "admission_date": data.get("admission_date", "N/A"),
             "discharge_date": data.get("discharge_date", "N/A"),
+            "Diagnosis": parse_multiline(request.form.get("Diagnosis", format_multiline_field(data.get("Diagnosis", "")))),
+            "Riskfactors": parse_multiline(request.form.get("Riskfactors", format_multiline_field(data.get("Riskfactors", "")))),
+            "PastHistory": parse_multiline(request.form.get("PastHistory", format_multiline_field(data.get("PastHistory", "")))),
+            "ChiefComplaints": request.form.get("ChiefComplaints", data.get("ChiefComplaints", "N/A")),
+            "Course": parse_multiline(request.form.get("Course", format_multiline_field(data.get("Course", "")))),
+            "Vitals": {
+                "TEMP": request.form.get("TEMP", data.get("Vitals", {}).get("TEMP", "N/A")),
+                "PR": request.form.get("PR", data.get("Vitals", {}).get("PR", "N/A")),
+                "BP": request.form.get("BP", data.get("Vitals", {}).get("BP", "N/A")),
+                "SPo2": request.form.get("SPo2", data.get("Vitals", {}).get("SPo2", "N/A")),
+                "RR": request.form.get("RR", data.get("Vitals", {}).get("RR", "N/A")),
+            },
+            "Examination": {
+                "CVS": request.form.get("CVS", data.get("Examination", {}).get("CVS", "N/A")),
+                "RS": request.form.get("RS", data.get("Examination", {}).get("RS", "N/A")),
+                "CNS": request.form.get("CNS", data.get("Examination", {}).get("CNS", "N/A")),
+                "PA": request.form.get("PA", data.get("Examination", {}).get("PA", "N/A")),
+            },
+            "Medications": data.get("Medications", [])
         }
 
-    # Ensure diagnosis includes "ADVICE: MEDICAL MANAGEMENT"
-    diagnosis = edited.get("Diagnosis", [])
-    if isinstance(diagnosis, str):
-        diagnosis = [diagnosis]
-    diagnosis = list(dict.fromkeys(diagnosis))
-    if not any("ADVICE: MEDICAL MANAGEMENT" in d.upper() for d in diagnosis):
-        diagnosis.append("ADVICE: MEDICAL MANAGEMENT")
-    edited["Diagnosis"] = diagnosis
+        # Ensure diagnosis includes "ADVICE: MEDICAL MANAGEMENT"
+        diagnosis = edited.get("Diagnosis", [])
+        if isinstance(diagnosis, str):
+            diagnosis = [diagnosis]
+        diagnosis = list(dict.fromkeys(diagnosis))
+        if not any("ADVICE: MEDICAL MANAGEMENT" in d.upper() for d in diagnosis):
+            diagnosis.append("ADVICE: MEDICAL MANAGEMENT")
+        edited["Diagnosis"] = diagnosis
 
-    # Collect medications (up to 10)
-    for i in range(1, 11):
-        form_val = (request.form.get(f"TAB{i}_form", "") or "").strip().upper()
-        name_val = request.form.get(f"TAB{i}_name", "").strip()
-        dosage = request.form.get(f"DOSAGE{i}", "").strip()
-        freq = request.form.get(f"FREQ{i}", "").strip()
-        time_val = request.form.get(f"TOM{i}", "").strip()
-        if any([form_val, name_val, dosage, freq, time_val]):
-            edited["Medications"].append({
-                "form": form_val or "",
-                "name": name_val or "",
-                "dosage": dosage or "N/A",
-                "freq": freq or "N/A",
-                "time": time_val or "N/A",
-            })
+        # Ensure "Medications" is present before appending
+        edited.setdefault("Medications", [])
 
-    try:
-        # Validate required fields
-        validate_json_data(edited)
+        # Collect medications (up to 10; form forced uppercase)
+        for i in range(1, 11):
+            form_val = (request.form.get(f"TAB{i}_form", "") or "").strip().upper()
+            name_val = request.form.get(f"TAB{i}_name", "").strip()
+            dosage = request.form.get(f"DOSAGE{i}", "").strip()
+            freq = request.form.get(f"FREQ{i}", "").strip()
+            time_val = request.form.get(f"TOM{i}", "").strip()
+            if any([form_val, name_val, dosage, freq, time_val]):
+                edited["Medications"].append({
+                    "form": form_val or "",
+                    "name": name_val or "",
+                    "dosage": dosage or "N/A",
+                    "freq": freq or "N/A",
+                    "time": time_val or "N/A",
+                })
 
-        # Dates formatting
-        admission_date = edited.get("admission_date", "")
-        discharge_date = edited.get("discharge_date", "")
         try:
-            if admission_date:
-                admission_date = datetime.strptime(admission_date, "%Y-%m-%d").strftime("%d-%b-%Y")
-            if discharge_date:
-                discharge_date = datetime.strptime(discharge_date, "%Y-%m-%d").strftime("%d-%b-%Y")
-        except ValueError:
-            pass
+            # Validate required fields
+            validate_json_data(edited)
 
-        # Riskfactors + PastHistory
-        risk_factors = edited.get("Riskfactors", [])
-        if isinstance(risk_factors, str):
-            risk_factors = [risk_factors]
-        past_history = edited.get("PastHistory", [])
-        if isinstance(past_history, str):
-            past_history = [past_history]
-        combined_history = list(dict.fromkeys(risk_factors + past_history))
+            # Dates formatting
+            admission_date = edited.get("admission_date", "")
+            discharge_date = edited.get("discharge_date", "")
+            try:
+                if admission_date:
+                    admission_date = datetime.strptime(admission_date, "%Y-%m-%d").strftime("%d-%b-%Y")
+                if discharge_date:
+                    discharge_date = datetime.strptime(discharge_date, "%Y-%m-%d").strftime("%d-%b-%Y")
+            except ValueError:
+                pass
 
-        # Build context
-        doc = DocxTemplate("template.docx")
-        context = {
-            "umr": edited.get("umr", "N/A"),
-            "name": edited.get("name", "N/A").title(),
-            "age": edited.get("age/gender", "N/A"),
-            "ad1": edited.get("ad1", "N/A").title(),
-            "ad2": edited.get("ad2", "N/A").title(),
-            "mob": edited.get("mob", "N/A"),
-            "admision": edited.get("admision_number", "N/A"),
-            "ward": edited.get("ward", "N/A").upper(),
-            "admit": admission_date,
-            "discharge": discharge_date,
-            "Diagnosis": format_multiline_field(edited.get("Diagnosis", [])),
-            "ChiefComplaints": format_multiline_field(edited.get("ChiefComplaints", "N/A")).upper(),
-            "Riskfactors": format_multiline_field(combined_history),
-            "Course": format_multiline_field(edited.get("Course", "N/A")),
-            "TEMP": edited.get("Vitals", {}).get("TEMP", "N/A"),
-            "BP": edited.get("Vitals", {}).get("BP", "N/A"),
-            "PR": edited.get("Vitals", {}).get("PR", "N/A"),
-            "SPo2": edited.get("Vitals", {}).get("SPo2", "N/A"),
-            "RR": edited.get("Vitals", {}).get("RR", "N/A"),
-            "CVS": edited.get("Examination", {}).get("CVS", "N/A"),
-            "RS": edited.get("Examination", {}).get("RS", "N/A"),
-            "CNS": edited.get("Examination", {}).get("CNS", "N/A"),
-            "PA": edited.get("Examination", {}).get("PA", "N/A"),
-            "current_date": datetime.now().strftime("%d-%b-%Y"),
-            "current_time": datetime.now().strftime("%I:%M %p")
-        }
+            # Riskfactors + PastHistory
+            risk_factors = edited.get("Riskfactors", [])
+            if isinstance(risk_factors, str):
+                risk_factors = [risk_factors]
+            past_history = edited.get("PastHistory", [])
+            if isinstance(past_history, str):
+                past_history = [past_history]
+            combined_history = list(dict.fromkeys(risk_factors + past_history))
 
-        # Medications placeholders
-        meds = edited.get("Medications", [])
-        for i in range(10):
-            med = meds[i] if i < len(meds) else {}
-            form_val = med.get("form", "").strip()
-            name_val = med.get("name", "").strip()
-            full_name = f"{form_val} {name_val}".strip() if (form_val or name_val) else ""
-            context[f"TAB{i + 1}"] = full_name
-            context[f"DOSAGE{i + 1}"] = med.get("dosage", "N/A") if med.get("dosage") else "N/A"
-            context[f"FREQ{i + 1}"] = med.get("freq", "N/A")
-            context[f"TOM{i + 1}"] = med.get("time", "N/A")
+            # Build context
+            doc = DocxTemplate("template.docx")
+            context = {
+                "umr": edited.get("umr", "N/A"),
+                "name": edited.get("name", "N/A").title(),
+                "age": edited.get("age/gender", "N/A"),
+                "ad1": edited.get("ad1", "N/A").title(),
+                "ad2": edited.get("ad2", "N/A").title(),
+                "mob": edited.get("mob", "N/A"),
+                "admision": edited.get("admision_number", "N/A"),
+                "ward": edited.get("ward", "N/A").upper(),
+                "admit": admission_date,
+                "discharge": discharge_date,
+                "Diagnosis": format_multiline_field(edited.get("Diagnosis", [])),
+                "ChiefComplaints": format_multiline_field(edited.get("ChiefComplaints", "N/A")).upper(),
+                "Riskfactors": format_multiline_field(combined_history),
+                "Course": format_multiline_field(edited.get("Course", "N/A")),
+                "TEMP": edited.get("Vitals", {}).get("TEMP", "N/A"),
+                "BP": edited.get("Vitals", {}).get("BP", "N/A"),
+                "PR": edited.get("Vitals", {}).get("PR", "N/A"),
+                "SPo2": edited.get("Vitals", {}).get("SPo2", "N/A"),
+                "RR": edited.get("Vitals", {}).get("RR", "N/A"),
+                "CVS": edited.get("Examination", {}).get("CVS", "N/A"),
+                "RS": edited.get("Examination", {}).get("RS", "N/A"),
+                "CNS": edited.get("Examination", {}).get("CNS", "N/A"),
+                "PA": edited.get("Examination", {}).get("PA", "N/A"),
+                "current_date": datetime.now().strftime("%d-%b-%Y"),
+                "current_time": datetime.now().strftime("%I:%M %p")
+            }
 
-        # Render and stream doc (no disk write)
-        doc.render(context)
-        output_filename = f"Discharge_{context['name'].replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
-        buffer = BytesIO()
-        docx_obj = doc.get_docx()
-        docx_obj.save(buffer)
-        buffer.seek(0)
+            # Medications placeholders
+            meds = edited.get("Medications") or []
+            for i in range(10):
+                med = meds[i] if i < len(meds) else {}
+                form_val = med.get("form", "").strip()
+                name_val = med.get("name", "").strip()
+                full_name = f"{form_val} {name_val}".strip() if (form_val or name_val) else ""
+                context[f"TAB{i + 1}"] = full_name
+                context[f"DOSAGE{i + 1}"] = med.get("dosage", "N/A") if med.get("dosage") else "N/A"
+                context[f"FREQ{i + 1}"] = med.get("freq", "N/A")
+                context[f"TOM{i + 1}"] = med.get("time", "N/A")
 
-        flash("✅ Document generated successfully!", "success")
-        return send_file(
-            buffer,
-            as_attachment=True,
-            download_name=output_filename,
-            mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        )
+            # Render and stream doc (no disk write)
+            doc.render(context)
+            output_filename = f"Discharge_{context['name'].replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
+            buffer = BytesIO()
+            docx_obj = doc.get_docx()
+            docx_obj.save(buffer)
+            buffer.seek(0)
 
-    except Exception as e:
-        flash(f"❌ Error during generation: {str(e)}", "danger")
-        return redirect(url_for("review"))
+            flash("✅ Document generated successfully!", "success")
+            return send_file(
+                buffer,
+                as_attachment=True,
+                download_name=output_filename,
+                mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+
+        except Exception as e:
+            flash(f"❌ Error during generation: {str(e)}", "danger")
+            return redirect(url_for("review"))
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.getenv("PORT", "8000")), debug=False)
