@@ -299,6 +299,34 @@ def review():
                 "current_time": datetime.now().strftime("%I:%M %p")
             }
 
+            # Add common aliases to improve template compatibility
+            context.update({
+                # Uppercase/basic aliases
+                "UMR": context["umr"],
+                "NAME": context["name"],
+                "AGE_GENDER": edited.get("age/gender", "N/A"),
+                "AD1": context["ad1"],
+                "AD2": context["ad2"],
+                "MOB": context["mob"],
+                "WARD_NAME": context["ward"],
+
+                # Admission/discharge naming variants
+                "ADMISSION": context["admit"],
+                "DISCHARGE": context["discharge"],
+                "ADMISSION_DATE": context["admit"],
+                "DISCHARGE_DATE": context["discharge"],
+
+                # Number variants (note: original JSON uses 'admision_number')
+                "ADMISSION_NUMBER": context["admision"],
+                "ADMISSION_NO": context["admision"],
+
+                # Vitals variants
+                "SPO2": context["SPo2"],  # some templates use 'SPO2'
+            })
+
+            # Helpful debug: see available keys in logs
+            app.logger.info(f"Docx context keys: {sorted(list(context.keys()))}")
+
             # Medications placeholders
             meds = edited.get("Medications") or []
             for i in range(10):
